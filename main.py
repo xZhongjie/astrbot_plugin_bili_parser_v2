@@ -297,6 +297,21 @@ class BiliPlugin(Star):
         except Exception:
             return b""
 
+    async def xingzhige_url(self, video: Video) -> str:
+        if self.http is None:
+            return ""
+        target = quote(video.url, safe="")
+        try:
+            async with self.http.get(f"https://api.xingzhige.com/API/b_parse/?url={target}") as resp:
+                logger.info("[bili2] 星之阁取直链 status=%s", resp.status)
+                if resp.status != 200:
+                    return ""
+                data = (await resp.json(content_type=None)).get("data") or {}
+                return str((data.get("video") or {}).get("url") or "")
+        except Exception as exc:
+            logger.warning("[bili2] 星之阁取直链异常：%s", exc)
+            return ""
+
     async def play_url(self, video: Video) -> str:
         if video.play_url:
             return video.play_url
@@ -322,6 +337,19 @@ class BiliPlugin(Star):
 
     async def download_video(self, video: Video) -> bytes | None:
         api = str(self.config.get("proxy_api") or DEFAULT_PROXY_API).strip()
+        if not video.play_url:
+            video.play_url = await self.play_url(video)
+        if not video.play_url:
+            try:
+                alt = await self.xingzhige_url(video)
+                if alt:
+                    video.play_url = alt
+                    logger.info("[bili2] 星之阁补到播放地址")
+            except Exception as exc:
+                logger.warning("[bili2] 补播放地址失败：%s", exc)
+        if not video.play_url:
+            logger.warning("[bili2] 没有可用的播放地址，跳过视频")
+            return None
         logger.info("[bili2] download_video 入口：play_url=%s cid=%s api=%s", bool(video.play_url), video.cid, bool(api))
         if self.http is None or not api:
             logger.warning("[bili2] http 或代理接口未配置")
