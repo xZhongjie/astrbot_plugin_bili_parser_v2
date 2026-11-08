@@ -475,8 +475,24 @@ class BiliPlugin(Star):
             return
         path = self.data_dir / f"bili_{int(time.time())}_{random.randint(1000, 9999)}.mp4"
         await asyncio.to_thread(path.write_bytes, data)
+        comp = None
+        for factory in (
+            lambda: Video(file=str(path)),
+            lambda: Video(path=str(path)),
+            lambda: Video(str(path)),
+            lambda: Video(url="file://" + str(path)),
+        ):
+            try:
+                comp = factory()
+                break
+            except TypeError:
+                continue
+        if comp is None:
+            logger.warning("[bili2] 无法构造 Video 组件")
+            return
         try:
-            await event.send(MessageChain([Video(file=str(path))]))
+            await event.send(MessageChain([comp]))
+            logger.info("[bili2] 视频已发送")
         except Exception as exc:
             logger.warning("[bili2] 视频发送失败：%s", exc)
         finally:
