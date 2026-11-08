@@ -1,0 +1,37 @@
+{
+  "proxy_api": {
+    "description": "视频下载代理接口",
+    "type": "string",
+    "default": "https://dy.kukutool.com/api/download-proxy-url",
+    "hint": "POST {url, sourceUrl, type:video} 返回 {url} 的接口。留空则不发视频。"
+  },
+  "threads": {
+    "description": "下载线程数",
+    "type": "int",
+    "default": 4,
+    "slider": {"min": 1, "max": 8, "step": 1},
+    "hint": "每个线程独立申请代理 token，避免单 token 被限流。"
+  },
+  "send_video": {
+    "description": "发送视频",
+    "type": "bool",
+    "default": true,
+    "hint": "卡片先发，视频后台下载后单独发送。"
+  },
+  "send_cover": {
+    "description": "发送封面",
+    "type": "bool",
+    "default": true
+  },
+  "template": {
+    "description": "卡片模板",
+    "type": "string",
+    "default": "【{title}】\nUP主：{up} · {duration}\n播放 {view} · 点赞 {like}\n{desc}\n{url}",
+    "hint": "可用变量：{title} {up} {duration} {view} {like} {desc} {url}"
+  },
+  "show_error": {
+    "description": "显示错误提示",
+    "type": "bool",
+    "default": false
+  }
+}
