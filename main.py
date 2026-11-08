@@ -379,8 +379,8 @@ class BiliPlugin(Star):
             logger.info("[bili2] 无 Content-Range，整包下载：%d 字节", len(data))
             return data if len(data) > 65536 else None
 
-        threads = max(1, min(8, int(self.config.get("threads") or 4)))
-        chunk = max(256 * 1024, total // threads // 1024 // 256 * 256 * 1024)
+        threads = max(1, min(16, int(self.config.get("threads") or 8)))
+        chunk = max(256 * 1024, min(1024 * 1024, total // threads))
         ranges = [(start, min(start + chunk - 1, total - 1)) for start in range(0, total, chunk)]
         sem = asyncio.Semaphore(threads)
         done = [0]
@@ -391,14 +391,20 @@ class BiliPlugin(Star):
 
         async def worker(start: int, end: int) -> bytes:
             want = end - start + 1
-            for attempt in range(4):
+            got = b""
+            for attempt in range(6):
+                offset = start + len(got)
+                if offset > end:
+                    break
                 url = base
                 if not template and attempt > 0:
                     url = await self.get_proxy_url(api, video)
                 if not url:
                     continue
-                part = await self.fetch_range(url, start, end)
-                if len(part) >= want:
+                part = await self.fetch_range(url, offset, end)
+                if part:
+                    got += part
+                if len(got) >= want:
                     async with lock:
                         done[0] += want
                         percent = done[0] / total * 100
@@ -406,7 +412,8 @@ class BiliPlugin(Star):
                         logger.info("[bili2] 下载进度：%.0f%%（%.1f/%.1fMB，%.1fMB/s）",
                                     percent, done[0] / 1024 / 1024,
                                     total / 1024 / 1024, done[0] / elapsed / 1024 / 1024)
-                    return part[:want]
+                    return got[:want]
+                logger.info("[bili2] 分片续传：%d/%d", len(got), want)
             return b""
 
         async def guarded(start: int, end: int) -> bytes:
