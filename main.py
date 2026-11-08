@@ -278,17 +278,23 @@ class BiliPlugin(Star):
         if self.http is None:
             return 0, ""
         try:
-            async with self.http.get(url, headers={"Range": "bytes=0-0"}) as resp:
+            async with self.http.get(
+                url,
+                headers={"User-Agent": BILI_HEADERS["User-Agent"], "Range": "bytes=0-0"},
+                allow_redirects=True,
+            ) as resp:
+                logger.info("[bili2] 探测代理 status=%s len=%s", resp.status, resp.headers.get("Content-Length"))
                 range_header = resp.headers.get("Content-Range", "")
                 total = int(range_header.rsplit("/", 1)[-1]) if "/" in range_header else 0
                 return total, range_header
-        except Exception:
+        except Exception as exc:
+            logger.warning("[bili2] 探测代理异常：%s", exc)
             return 0, ""
 
     async def fetch_range(self, url: str, start: int, end: int) -> bytes:
         if self.http is None:
             return b""
-        headers = {**BILI_HEADERS, "Range": f"bytes={start}-{end}"}
+        headers = {"User-Agent": BILI_HEADERS["User-Agent"], "Range": f"bytes={start}-{end}"}
         try:
             async with self.http.get(url, headers=headers) as resp:
                 if resp.status not in (200, 206):
