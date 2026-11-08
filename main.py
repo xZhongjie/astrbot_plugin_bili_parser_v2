@@ -328,15 +328,21 @@ class BiliPlugin(Star):
             return None
         threads = max(1, min(8, int(self.config.get("threads") or 4)))
         if not await self.play_url(video):
+            logger.warning("[bili2] 没有可用的播放地址（playurl 失败）")
+            return None
+        if not await self.play_url(video):
             logger.warning("[bili2] 没有可用的播放地址")
             return None
         first = await self.get_proxy_url(api, video)
+        logger.info("[bili2] 代理地址：%s", bool(first))
         if not first:
             logger.warning("[bili2] 代理接口未返回地址")
             return None
         total, _ = await self.total_size(first)
+        logger.info("[bili2] 总大小：%d", total)
         if total <= 0:
             data = await self.fetch_range(first, 0, 10 * 1024 * 1024)
+            logger.info("[bili2] 无 Content-Range，整包下载：%d 字节", len(data))
             return data if len(data) > 65536 else None
 
         chunk = max(256 * 1024, total // threads // 1024 // 256 * 256 * 1024)
