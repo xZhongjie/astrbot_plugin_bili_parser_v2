@@ -494,14 +494,28 @@ class BiliPlugin(Star):
             await event.send(MessageChain([comp]))
             logger.info("[bili2] 视频已发送")
         except Exception as exc:
-            logger.warning("[bili2] 视频组件发送失败，改用文件发送：%s", exc)
+            logger.warning("[bili2] 视频组件发送失败，改用 OneBot 原始发送：%s", exc)
             try:
-                await event.send(
-                    MessageChain([File(name="视频.mp4", file=str(path))])
-                )
-                logger.info("[bili2] 视频已作为文件发送")
+                bot = getattr(event, "bot", None)
+                if bot is None:
+                    raise RuntimeError("没有可用的 bot 实例")
+                raw = path.read_bytes()
+                b64 = base64.b64encode(raw).decode()
+                segment = [{"type": "video", "data": {"file": "base64://" + b64}}]
+                group_id = event.get_group_id()
+                if group_id:
+                    await bot.call_action(
+                        "send_group_msg", group_id=int(group_id), message=segment
+                    )
+                else:
+                    await bot.call_action(
+                        "send_private_msg",
+                        user_id=int(event.get_sender_id()),
+                        message=segment,
+                    )
+                logger.info("[bili2] 视频已通过 OneBot 原始接口发送")
             except Exception as exc2:
-                logger.warning("[bili2] 文件发送也失败：%s", exc2)
+                logger.warning("[bili2] OneBot 发送也失败：%s", exc2)
         finally:
             await asyncio.sleep(600)
             try:
