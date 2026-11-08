@@ -342,58 +342,59 @@ class BiliPlugin(Star):
         return ""
 
     async def download_video(self, video: Video) -> bytes | None:
+        template = str(self.config.get("video_proxy") or "").strip()
         api = str(self.config.get("proxy_api") or DEFAULT_PROXY_API).strip()
-        if not video.play_url:
-            video.play_url = await self.play_url(video)
-        if not video.play_url:
-            try:
-                alt = await self.xingzhige_url(video)
-                if alt:
-                    video.play_url = alt
-                    logger.info("[bili2] 星之阁补到播放地址")
-            except Exception as exc:
-                logger.warning("[bili2] 补播放地址失败：%s", exc)
-        if not video.play_url:
+        logger.info("[bili2] download_video 入口：template=%s api=%s", bool(template), bool(api))
+        if self.http is None:
+            return None
+
+        direct = await self.play_url(video)
+        if not direct:
+            direct = await self.xingzhige_url(video)
+        if not direct:
             logger.warning("[bili2] 没有可用的播放地址，跳过视频")
             return None
-        logger.info("[bili2] download_video 入口：play_url=%s cid=%s api=%s", bool(video.play_url), video.cid, bool(api))
-        if self.http is None or not api:
-            logger.warning("[bili2] http 或代理接口未配置")
-            return None
-        threads = max(1, min(8, int(self.config.get("threads") or 4)))
-        if not await self.play_url(video):
-            logger.warning("[bili2] 没有可用的播放地址（playurl 失败）")
-            return None
-        if not await self.play_url(video):
-            logger.warning("[bili2] 没有可用的播放地址")
-            return None
-        first = await self.get_proxy_url(api, video)
-        logger.info("[bili2] 代理地址：%s", bool(first))
-        if not first:
-            logger.warning("[bili2] 代理接口未返回地址")
-            return None
-        total, _ = await self.total_size(first)
+        video.play_url = direct
+
+        if template:
+            base = template.format(url=quote(direct, safe=""), raw_url=direct)
+            if not base.startswith("http"):
+                logger.warning("[bili2] video_proxy 模板无效")
+                return None
+            logger.info("[bili2] 使用 Worker/中转下载")
+        else:
+            if not api:
+                logger.warning("[bili2] 未配置代理接口")
+                return None
+            base = await self.get_proxy_url(api, video)
+            if not base:
+                logger.warning("[bili2] 代理接口未返回地址")
+                return None
+            logger.info("[bili2] 使用第三方代理下载")
+
+        total, _ = await self.total_size(base)
         logger.info("[bili2] 总大小：%d", total)
         if total <= 0:
-            data = await self.fetch_range(first, 0, 10 * 1024 * 1024)
+            data = await self.fetch_range(base, 0, 10 * 1024 * 1024)
             logger.info("[bili2] 无 Content-Range，整包下载：%d 字节", len(data))
             return data if len(data) > 65536 else None
 
+        threads = max(1, min(8, int(self.config.get("threads") or 4)))
         chunk = max(256 * 1024, total // threads // 1024 // 256 * 256 * 1024)
         ranges = [(start, min(start + chunk - 1, total - 1)) for start in range(0, total, chunk)]
         sem = asyncio.Semaphore(threads)
         done = [0]
         lock = asyncio.Lock()
         started = time.monotonic()
-        logger.info(
-            "[bili2] 开始下载：%.1fMB，%d 线程，%d 个分片",
-            total / 1024 / 1024, threads, len(ranges),
-        )
+        logger.info("[bili2] 开始下载：%.1fMB，%d 线程，%d 个分片",
+                    total / 1024 / 1024, threads, len(ranges))
 
         async def worker(start: int, end: int) -> bytes:
             want = end - start + 1
             for attempt in range(4):
-                url = first if attempt == 0 else await self.get_proxy_url(api, video)
+                url = base
+                if not template and attempt > 0:
+                    url = await self.get_proxy_url(api, video)
                 if not url:
                     continue
                 part = await self.fetch_range(url, start, end)
@@ -402,11 +403,9 @@ class BiliPlugin(Star):
                         done[0] += want
                         percent = done[0] / total * 100
                         elapsed = max(0.001, time.monotonic() - started)
-                        logger.info(
-                            "[bili2] 下载进度：%.0f%%（%.1f/%.1fMB，%.1fMB/s）",
-                            percent, done[0] / 1024 / 1024,
-                            total / 1024 / 1024, done[0] / elapsed / 1024 / 1024,
-                        )
+                        logger.info("[bili2] 下载进度：%.0f%%（%.1f/%.1fMB，%.1fMB/s）",
+                                    percent, done[0] / 1024 / 1024,
+                                    total / 1024 / 1024, done[0] / elapsed / 1024 / 1024)
                     return part[:want]
             return b""
 
