@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import random
 import re
@@ -373,7 +374,7 @@ class BiliPlugin(Star):
         if bool(self.config.get("send_cover", True)):
             cover = await self.cover_bytes(video)
             if cover:
-                chain.append(Image(file=cover))
+                chain.append(Image(file="base64://" + base64.b64encode(cover).decode()))
         chain.append(Plain(self.card_text(video)))
         try:
             await event.send(MessageChain(chain))
