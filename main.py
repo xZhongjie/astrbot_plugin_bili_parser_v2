@@ -111,6 +111,30 @@ class BiliPlugin(Star):
             logger.warning("[bili2] 短链解析失败：%s", exc)
             return url
 
+
+    def miniapp_url(self, event: AstrMessageEvent) -> str:
+        """从 QQ 小程序卡片里提取 B 站链接。"""
+        raw = getattr(getattr(event, "message_obj", None), "raw_message", None)
+        try:
+            message = raw.get("message") if hasattr(raw, "get") else None
+        except Exception:
+            message = None
+        if not isinstance(message, list):
+            return ""
+        for seg in message:
+            if not isinstance(seg, dict):
+                continue
+            if seg.get("type") not in ("json", "light_app", "xml"):
+                continue
+            data = seg.get("data") or {}
+            content = data.get("data") or data.get("content") or data.get("xml") or ""
+            if not isinstance(content, str):
+                continue
+            for url in URL_RE.findall(content):
+                if "bilibili.com" in url or "b23.tv" in url:
+                    return url
+        return ""
+
     async def extract(self, text: str) -> tuple[str, int]:
         match = BV_RE.search(text)
         if match:
@@ -388,6 +412,9 @@ class BiliPlugin(Star):
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def auto_parse(self, event: AstrMessageEvent):
         text = getattr(event, "message_str", "") or ""
+        card_url = self.miniapp_url(event)
+        if card_url:
+            text = card_url
         if not ("bilibili.com" in text or "b23.tv" in text or BV_RE.search(text)):
             return
         bvid, page = await self.extract(text)
