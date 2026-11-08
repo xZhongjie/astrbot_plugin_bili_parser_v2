@@ -461,7 +461,9 @@ class BiliPlugin(Star):
         await self.send_card(event, video)
         logger.info("[bili2] 卡片已发送")
         if bool(self.config.get("send_video")):
-            self.schedule_video(event, video)    @filter.command("bili", alias={"b站解析", "哔哩哔哩解析"})
+            self.schedule_video(event, video)
+
+    @filter.command("bili", alias={"b站解析", "哔哩哔哩解析"})
     async def bili(self, event: AstrMessageEvent, args: GreedyStr):
         text = str(args or "").strip()
         if not text:
