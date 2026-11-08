@@ -2,7 +2,7 @@ name: astrbot_plugin_bili_parser_v2
 display_name: B站视频解析 v2
 desc: 干净重写版：星之阁/官方解析，卡片先发，视频走第三方代理多线程下载（每线程独立 token）。
 short_desc: B站解析，多线程代理下载视频
-version: v2.1.6
+version: v2.1.7
 author: xZhongjie
 repo: https://github.com/xZhongjie/astrbot_plugin_bili_parser_v2
 astrbot_version: ">=4.10.4"
@@ -12,6 +12,7 @@ support_platforms:
   - discord
   - kook
   - webchat
+
 
 
 
