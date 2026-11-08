@@ -15,6 +15,7 @@ import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import quote
 from typing import Any
 
 import aiohttp
@@ -135,7 +136,8 @@ class BiliPlugin(Star):
     async def fetch_xingzhige(self, bvid: str, page: int) -> Video | None:
         if self.http is None:
             return None
-        url = f"https://api.xingzhige.com/API/b_parse/?url={bvid}"
+        target = quote(f"https://www.bilibili.com/video/{bvid}" + (f"?p={page}" if page > 1 else ""), safe="")
+        url = f"https://api.xingzhige.com/API/b_parse/?url={target}"
         try:
             async with self.http.get(url) as resp:
                 if resp.status != 200:
@@ -163,14 +165,22 @@ class BiliPlugin(Star):
     async def fetch_official(self, bvid: str, page: int) -> Video | None:
         if self.http is None:
             return None
-        try:
-            async with self.http.get(
-                "https://api.bilibili.com/x/web-interface/view",
-                params={"bvid": bvid},
-            ) as resp:
-                payload = await resp.json()
-        except Exception as exc:
-            logger.warning("[bili2] 官方接口失败：%s", exc)
+        payload = {}
+        for attempt in range(2):
+            buvid3 = "%032xinfoc" % random.getrandbits(128)
+            try:
+                async with self.http.get(
+                    "https://api.bilibili.com/x/web-interface/view",
+                    params={"bvid": bvid},
+                    headers={**BILI_HEADERS, "Cookie": f"buvid3={buvid3}"},
+                ) as resp:
+                    if resp.status == 412:
+                        continue
+                    payload = await resp.json(content_type=None)
+                    break
+            except Exception as exc:
+                logger.warning("[bili2] 官方接口失败：%s", exc)
+        if not payload:
             return None
         data = payload.get("data") or {}
         if not data.get("bvid"):
