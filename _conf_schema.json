@@ -1,4 +1,10 @@
 {
+  "video_proxy": {
+    "description": "视频中转模板（Worker/nginx）",
+    "type": "string",
+    "default": "",
+    "hint": "填 https://你的worker.workers.dev/?url={url} 后，视频改走该中转下载，不再使用 proxy_api。"
+  },
   "proxy_api": {
     "description": "视频下载代理接口",
     "type": "string",
