@@ -23,7 +23,7 @@ import aiohttp
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
-from astrbot.api.message_components import Image, Plain, Video
+from astrbot.api.message_components import File, Image, Plain, Video
 from astrbot.api.star import Context, Star, StarTools
 from astrbot.core.star.filter.command import GreedyStr
 
@@ -494,7 +494,14 @@ class BiliPlugin(Star):
             await event.send(MessageChain([comp]))
             logger.info("[bili2] 视频已发送")
         except Exception as exc:
-            logger.warning("[bili2] 视频发送失败：%s", exc)
+            logger.warning("[bili2] 视频组件发送失败，改用文件发送：%s", exc)
+            try:
+                await event.send(
+                    MessageChain([File(name="视频.mp4", file=str(path))])
+                )
+                logger.info("[bili2] 视频已作为文件发送")
+            except Exception as exc2:
+                logger.warning("[bili2] 文件发送也失败：%s", exc2)
         finally:
             await asyncio.sleep(600)
             try:
