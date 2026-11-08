@@ -374,7 +374,25 @@ class BiliPlugin(Star):
         task.add_done_callback(self._tasks.discard)
 
     # -- 指令 ---------------------------------------------------------------
-    @filter.command("bili", alias={"b站解析", "哔哩哔哩解析"})
+
+    @filter.event_message_type(filter.EventMessageType.ALL)
+    async def auto_parse(self, event: AstrMessageEvent):
+        text = getattr(event, "message_str", "") or ""
+        if not ("bilibili.com" in text or "b23.tv" in text or BV_RE.search(text)):
+            return
+        bvid, page = await self.extract(text)
+        if not bvid:
+            return
+        try:
+            event.call_llm = True
+        except Exception:
+            pass
+        video = await self.fetch_info(bvid, page)
+        if video is None:
+            return
+        await self.send_card(event, video)
+        if bool(self.config.get("send_video")) and video.play_url:
+            self.schedule_video(event, video)    @filter.command("bili", alias={"b站解析", "哔哩哔哩解析"})
     async def bili(self, event: AstrMessageEvent, args: GreedyStr):
         text = str(args or "").strip()
         if not text:
@@ -393,3 +411,4 @@ class BiliPlugin(Star):
         await self.send_card(event, video)
         if bool(self.config.get("send_video")) and video.play_url:
             self.schedule_video(event, video)
+
