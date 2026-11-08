@@ -325,6 +325,9 @@ class BiliPlugin(Star):
         if self.http is None or not api:
             return None
         threads = max(1, min(8, int(self.config.get("threads") or 4)))
+        if not await self.play_url(video):
+            logger.warning("[bili2] 没有可用的播放地址")
+            return None
         first = await self.get_proxy_url(api, video)
         if not first:
             logger.warning("[bili2] 代理接口未返回地址")
@@ -457,7 +460,7 @@ class BiliPlugin(Star):
         logger.info("[bili2] 解析成功：%s %s", video.bvid, video.title[:40])
         await self.send_card(event, video)
         logger.info("[bili2] 卡片已发送")
-        if bool(self.config.get("send_video")) and video.play_url:
+        if bool(self.config.get("send_video")):
             self.schedule_video(event, video)    @filter.command("bili", alias={"b站解析", "哔哩哔哩解析"})
     async def bili(self, event: AstrMessageEvent, args: GreedyStr):
         text = str(args or "").strip()
@@ -477,6 +480,6 @@ class BiliPlugin(Star):
         logger.info("[bili2] 解析成功：%s %s", video.bvid, video.title[:40])
         await self.send_card(event, video)
         logger.info("[bili2] 卡片已发送")
-        if bool(self.config.get("send_video")) and video.play_url:
+        if bool(self.config.get("send_video")):
             self.schedule_video(event, video)
 
