@@ -54,6 +54,7 @@ class Video:
     view: int = 0
     like: int = 0
     page: int = 1
+    cid: int = 0
     url: str = ""
     play_url: str = ""
 
@@ -183,6 +184,7 @@ class BiliPlugin(Star):
             view=int((data.get("stat") or {}).get("view") or 0),
             like=int((data.get("stat") or {}).get("like") or 0),
             page=page,
+            cid=int(data.get("cid") or 0),
             url=f"https://www.bilibili.com/video/{bvid}" + (f"?p={page}" if page > 1 else ""),
             play_url=str((data.get("video") or {}).get("url") or ""),
         )
@@ -222,6 +224,7 @@ class BiliPlugin(Star):
             view=int((data.get("stat") or {}).get("view") or 0),
             like=int((data.get("stat") or {}).get("like") or 0),
             page=page,
+            cid=int(data.get("cid") or 0),
             url=f"https://www.bilibili.com/video/{bvid}" + (f"?p={page}" if page > 1 else ""),
         )
 
@@ -256,7 +259,7 @@ class BiliPlugin(Star):
         if self.http is None:
             return ""
         payload = {
-            "url": video.play_url or video.url,
+            "url": await self.play_url(video),
             "sourceUrl": video.url,
             "type": "video",
         }
@@ -293,6 +296,29 @@ class BiliPlugin(Star):
                 return await resp.read()
         except Exception:
             return b""
+
+    async def play_url(self, video: Video) -> str:
+        if video.play_url:
+            return video.play_url
+        if self.http is None or not video.cid:
+            return ""
+        for _ in range(2):
+            buvid3 = "%032xinfoc" % random.getrandbits(128)
+            try:
+                async with self.http.get(
+                    "https://api.bilibili.com/x/player/playurl",
+                    params={"bvid": video.bvid, "cid": video.cid, "fnval": 1, "qn": 64},
+                    headers={**BILI_HEADERS, "Cookie": f"buvid3={buvid3}"},
+                ) as resp:
+                    if resp.status == 412:
+                        continue
+                    data = await resp.json(content_type=None)
+                durl = ((data.get("data") or {}).get("durl") or [])
+                if durl:
+                    return str(durl[0].get("url") or "")
+            except Exception:
+                continue
+        return ""
 
     async def download_video(self, video: Video) -> bytes | None:
         api = str(self.config.get("proxy_api") or DEFAULT_PROXY_API).strip()
@@ -428,7 +454,9 @@ class BiliPlugin(Star):
         video = await self.fetch_info(bvid, page)
         if video is None:
             return
+        logger.info("[bili2] 解析成功：%s %s", video.bvid, video.title[:40])
         await self.send_card(event, video)
+        logger.info("[bili2] 卡片已发送")
         if bool(self.config.get("send_video")) and video.play_url:
             self.schedule_video(event, video)    @filter.command("bili", alias={"b站解析", "哔哩哔哩解析"})
     async def bili(self, event: AstrMessageEvent, args: GreedyStr):
@@ -446,7 +474,9 @@ class BiliPlugin(Star):
             if self.config.get("show_error"):
                 await event.send(MessageChain([Plain("解析失败，请稍后再试")]))
             return
+        logger.info("[bili2] 解析成功：%s %s", video.bvid, video.title[:40])
         await self.send_card(event, video)
+        logger.info("[bili2] 卡片已发送")
         if bool(self.config.get("send_video")) and video.play_url:
             self.schedule_video(event, video)
 
