@@ -22,7 +22,7 @@ from typing import Any
 import aiohttp
 
 from astrbot.api import AstrBotConfig, logger
-from astrbot.api.event import AstrMessageEvent, EventMessageType, MessageChain, filter
+from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.message_components import Image, Plain, Video
 from astrbot.api.star import Context, Star, StarTools
 from astrbot.core.star.filter.command import GreedyStr
@@ -410,7 +410,7 @@ class BiliPlugin(Star):
 
     # -- 指令 ---------------------------------------------------------------
 
-    @filter.event_message_type(EventMessageType.ALL)
+    @filter.event_message_type(filter.EventMessageType.ALL)
     async def auto_parse(self, event: AstrMessageEvent):
         text = getattr(event, "message_str", "") or ""
         card_url = self.miniapp_url(event)
