@@ -322,7 +322,9 @@ class BiliPlugin(Star):
 
     async def download_video(self, video: Video) -> bytes | None:
         api = str(self.config.get("proxy_api") or DEFAULT_PROXY_API).strip()
+        logger.info("[bili2] download_video 入口：play_url=%s cid=%s api=%s", bool(video.play_url), video.cid, bool(api))
         if self.http is None or not api:
+            logger.warning("[bili2] http 或代理接口未配置")
             return None
         threads = max(1, min(8, int(self.config.get("threads") or 4)))
         if not await self.play_url(video):
@@ -412,7 +414,13 @@ class BiliPlugin(Star):
             await event.send(MessageChain([Plain(self.card_text(video))]))
 
     async def send_video_later(self, event: AstrMessageEvent, video: Video) -> None:
-        data = await self.download_video(video)
+        logger.info("[bili2] 视频任务开始：%s", video.bvid)
+        try:
+            data = await self.download_video(video)
+        except Exception:
+            logger.exception("[bili2] 视频任务异常")
+            return
+        logger.info("[bili2] 视频任务结束：%d 字节", len(data or b""))
         if not data:
             return
         if len(data) < 65536:
