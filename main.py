@@ -115,26 +115,56 @@ class BiliPlugin(Star):
 
 
     def miniapp_url(self, event: AstrMessageEvent) -> str:
-        """从 QQ 小程序卡片里提取 B 站链接。"""
+        """从 QQ 小程序 / 结构化卡片里提取 B 站链接。"""
+        import html as _html
+        from urllib.parse import unquote
+
+        def scan(text: str) -> str:
+            if not text:
+                return ""
+            text = _html.unescape(str(text)).replace("\\/", "/")
+            try:
+                text = unquote(text)
+            except Exception:
+                pass
+            for match in re.finditer(r"https?://[^\s\"'<>\\]+", text):
+                url = match.group(0)
+                if "bilibili.com" in url or "b23.tv" in url:
+                    return url
+            return ""
+
         raw = getattr(getattr(event, "message_obj", None), "raw_message", None)
+        message = None
         try:
             message = raw.get("message") if hasattr(raw, "get") else None
         except Exception:
             message = None
-        if not isinstance(message, list):
-            return ""
-        for seg in message:
-            if not isinstance(seg, dict):
-                continue
-            if seg.get("type") not in ("json", "light_app", "xml"):
-                continue
-            data = seg.get("data") or {}
-            content = data.get("data") or data.get("content") or data.get("xml") or ""
-            if not isinstance(content, str):
-                continue
-            for url in URL_RE.findall(content):
-                if "bilibili.com" in url or "b23.tv" in url:
-                    return url
+        kinds = []
+        if isinstance(message, list):
+            for seg in message:
+                if not isinstance(seg, dict):
+                    continue
+                kinds.append(str(seg.get("type")))
+                if str(seg.get("type")) not in ("json", "light_app", "xml", "share"):
+                    continue
+                data = seg.get("data") or {}
+                for key in ("data", "content", "xml", "url", "jumpUrl", "qqdocurl"):
+                    found = scan(data.get(key) if isinstance(data, dict) else "")
+                    if found:
+                        return found
+                found = scan(json.dumps(data, ensure_ascii=False))
+                if found:
+                    return found
+        # 兜底：整条原始消息 / 文本里扫描
+        for candidate in (
+            json.dumps(raw, ensure_ascii=False) if raw is not None else "",
+            str(getattr(event, "message_str", "") or ""),
+            str(getattr(event, "message_obj", "") or ""),
+        ):
+            found = scan(candidate)
+            if found:
+                return found
+        logger.info("[bili2] 卡片未提取到链接，消息段类型=%s", kinds)
         return ""
 
     async def extract(self, text: str) -> tuple[str, int]:
