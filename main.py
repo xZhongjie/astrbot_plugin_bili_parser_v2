@@ -155,16 +155,6 @@ class BiliPlugin(Star):
                 found = scan(json.dumps(data, ensure_ascii=False))
                 if found:
                     return found
-        # 兜底：整条原始消息 / 文本里扫描
-        for candidate in (
-            json.dumps(raw, ensure_ascii=False) if raw is not None else "",
-            str(getattr(event, "message_str", "") or ""),
-            str(getattr(event, "message_obj", "") or ""),
-        ):
-            found = scan(candidate)
-            if found:
-                return found
-        logger.info("[bili2] 卡片未提取到链接，消息段类型=%s", kinds)
         return ""
 
     async def extract(self, text: str) -> tuple[str, int]:
@@ -562,7 +552,10 @@ class BiliPlugin(Star):
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def auto_parse(self, event: AstrMessageEvent):
-        text = getattr(event, "message_str", "") or ""
+        text = ""
+        for seg in getattr(getattr(event, "message_obj", None), "message", []) or []:
+            if isinstance(seg, Plain) and getattr(seg, "text", None):
+                text += seg.text
         card_url = self.miniapp_url(event)
         if card_url:
             text = card_url
