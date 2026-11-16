@@ -399,7 +399,7 @@ class BiliPlugin(Star):
             logger.info("[bili2] 无 Content-Range，整包下载：%d 字节", len(data))
             return data if len(data) > 65536 else None
 
-        threads = max(1, min(16, int(self.config.get("threads") or 8)))
+        threads = max(1, min(128, int(self.config.get("threads") or 8)))
         chunk = max(256 * 1024, min(1024 * 1024, total // threads))
         ranges = [(start, min(start + chunk - 1, total - 1)) for start in range(0, total, chunk)]
         sem = asyncio.Semaphore(threads)
