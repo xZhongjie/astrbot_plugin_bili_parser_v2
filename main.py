@@ -311,17 +311,18 @@ class BiliPlugin(Star):
             logger.warning("[bili2] 探测代理异常：%s", exc)
             return 0, ""
 
-    async def fetch_range(self, url: str, start: int, end: int) -> bytes:
+    async def fetch_range(self, url: str, start: int, end: int) -> tuple[bytes, int]:
         if self.http is None:
-            return b""
+            return b"", -1
         headers = {"User-Agent": BILI_HEADERS["User-Agent"], "Range": f"bytes={start}-{end}"}
         try:
             async with self.http.get(url, headers=headers) as resp:
                 if resp.status not in (200, 206):
-                    return b""
-                return await resp.read()
-        except Exception:
-            return b""
+                    return b"", resp.status
+                return await resp.read(), resp.status
+        except Exception as exc:
+            logger.info("[bili2] range 请求异常：%s", exc)
+            return b"", -1
 
     async def xingzhige_url(self, video: Video) -> str:
         if self.http is None:
@@ -395,12 +396,13 @@ class BiliPlugin(Star):
         total, _ = await self.total_size(base)
         logger.info("[bili2] 总大小：%d", total)
         if total <= 0:
-            data = await self.fetch_range(base, 0, 10 * 1024 * 1024)
+            data, _ = await self.fetch_range(base, 0, 10 * 1024 * 1024)
             logger.info("[bili2] 无 Content-Range，整包下载：%d 字节", len(data))
             return data if len(data) > 65536 else None
 
         threads = max(1, min(128, int(self.config.get("threads") or 8)))
-        chunk = max(256 * 1024, min(1024 * 1024, total // threads))
+        chunk = max(512 * 1024, min(2 * 1024 * 1024, total // max(1, threads)))
+        threads = max(1, min(threads, total // chunk + 1))
         ranges = [(start, min(start + chunk - 1, total - 1)) for start in range(0, total, chunk)]
         sem = asyncio.Semaphore(threads)
         done = [0]
@@ -421,9 +423,16 @@ class BiliPlugin(Star):
                     url = await self.get_proxy_url(api, video)
                 if not url:
                     continue
-                part = await self.fetch_range(url, offset, end)
+                part, status = await self.fetch_range(url, offset, end)
                 if part:
                     got += part
+                elif attempt >= 0:
+                    logger.info(
+                        "[bili2] 分片失败 status=%s start=%d attempt=%d",
+                        status, offset, attempt + 1,
+                    )
+                if len(got) < want and attempt > 0:
+                    await asyncio.sleep(min(1.5 * attempt, 8))
                 if len(got) >= want:
                     async with lock:
                         done[0] += want
